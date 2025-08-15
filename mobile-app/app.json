@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Location Reminder App",
+    "slug": "location-reminder-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.locationreminder.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "このアプリは、場所に基づいたリマインダーを提供するために位置情報を使用します。",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "このアプリは、場所に基づいたリマインダーを提供するために位置情報を使用します。",
+        "NSLocationAlwaysUsageDescription": "このアプリは、バックグラウンドでも場所に基づいたリマインダーを提供するために常時位置情報を使用します。",
+        "NSLocationUsageDescription": "このアプリは位置情報を使用してリマインダーを提供します。"
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "このアプリは、場所に基づいたリマインダーを提供するために位置情報を使用します。"
+        }
+      ]
+    ],
+    "scheme": "location-reminder-app"
+  }
+}
