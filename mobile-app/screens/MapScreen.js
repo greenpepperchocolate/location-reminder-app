@@ -354,28 +354,32 @@ const MapScreen = ({ navigation }) => {
         >
           <Text style={styles.controlButtonText}>+ リマインダー</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          onPress={() => navigation.navigate('Dashboard')}
+        >
+          <Text style={styles.controlButtonText}>📊 情報</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          onPress={() => navigation.navigate('ReminderList')}
+        >
+          <Text style={styles.controlButtonText}>📝 一覧</Text>
+        </TouchableOpacity>
       </View>
 
      
 
       {/* Info Panel */}
       <View style={styles.infoPanel}>
-        <Text style={styles.infoPanelTitle}>📊 マップ情報</Text>
+        <Text style={styles.infoPanelTitle}>📊 周辺情報</Text>
         <Text style={styles.infoPanelText}>
-          店舗データ: {Array.isArray(stores) ? stores.length : 0}件
+          店舗数: {Array.isArray(stores) ? stores.length : 0}件
         </Text>
         <Text style={styles.infoPanelText}>
-          アクティブリマインダー: {(() => {
-            try {
-              return Array.isArray(reminders) ? reminders.filter(r => r.is_active).length : 0;
-            } catch (error) {
-              console.error('Error counting active reminders:', error);
-              return 0;
-            }
-          })()}件
-        </Text>
-        <Text style={styles.infoPanelText}>
-          検索範囲: 5km以内
+          範囲: 5km以内
         </Text>
       </View>
     </View>
@@ -385,10 +389,11 @@ const MapScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f5f5f5',
   },
   map: {
-    width: width,
-    height: height - 100, // Account for header
+    flex: 1, // Use flex to take full available space
+    width: '100%',
   },
   loadingContainer: {
     flex: 1,

@@ -70,6 +70,12 @@ export default function App() {
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // デバッグ用ログ
+  console.log('=== App.js State ===');
+  console.log('isLoggedIn:', isLoggedIn);
+  console.log('loading:', loading);
+  console.log('initialRouteName will be:', isLoggedIn ? "Map" : "Login");
+
   useEffect(() => {
     initializeApp();
     setupAxiosInterceptors();
@@ -327,6 +333,7 @@ export default function App() {
     }}>
       <NavigationContainer>
         <Stack.Navigator 
+          initialRouteName={isLoggedIn ? "Map" : "Login"}
           screenOptions={{
             headerStyle: { backgroundColor: '#007AFF' },
             headerTintColor: '#fff',
@@ -342,14 +349,14 @@ export default function App() {
           ) : (
             <>
               <Stack.Screen 
-                name="Dashboard" 
-                component={DashboardScreen} 
-                options={{ title: '📍 位置リマインダー' }}
-              />
-              <Stack.Screen 
                 name="Map" 
                 component={MapScreen} 
                 options={{ title: '🗺️ マップ' }}
+              />
+              <Stack.Screen 
+                name="Dashboard" 
+                component={DashboardScreen} 
+                options={{ title: '📍 ダッシュボード' }}
               />
               <Stack.Screen 
                 name="ReminderForm" 

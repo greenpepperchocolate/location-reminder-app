@@ -7,14 +7,21 @@ import {
   Alert,
   ScrollView,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
+import MapView, { Marker, Circle } from 'react-native-maps';
 import axios from 'axios';
 import { AuthContext } from '../App';
+
+const { width, height } = Dimensions.get('window');
 
 const DashboardScreen = ({ navigation }) => {
   const { user, location, updateLocation, logout } = useContext(AuthContext);
   const [recentReminders, setRecentReminders] = useState([]);
   const [nearbyStores, setNearbyStores] = useState([]);
+  const [stores, setStores] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [region, setRegion] = useState(null);
   const [stats, setStats] = useState({
     totalReminders: 0,
     activeReminders: 0,
@@ -36,6 +43,16 @@ const DashboardScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadData();
+    if (location) {
+      setRegion({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      fetchStoresForMap();
+      fetchRemindersForMap();
+    }
   }, [location]);
 
   const loadData = async () => {
@@ -166,61 +183,94 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
+  const fetchStoresForMap = async () => {
+    try {
+      const response = await axios.get(`${axios.defaults.baseURL}/stores/nearby/`, {
+        params: {
+          lat: location.latitude,
+          lng: location.longitude,
+          radius: 2.0 // 2km以内
+        }
+      });
+      setStores(response.data || []);
+    } catch (error) {
+      console.error('Dashboard: 店舗データ取得エラー:', error);
+      setStores([]);
+    }
+  };
+
+  const fetchRemindersForMap = async () => {
+    try {
+      const response = await axios.get(`${axios.defaults.baseURL}/reminders/`);
+      const remindersData = response.data.results || response.data || [];
+      setReminders(remindersData);
+    } catch (error) {
+      console.error('Dashboard: リマインダー取得エラー:', error);
+      setReminders([]);
+    }
+  };
+
+  const getStoreIcon = (storeType) => {
+    switch (storeType) {
+      case 'convenience': return '🏪';
+      case 'pharmacy': return '💊';
+      default: return '🏪';
+    }
+  };
+
+  const getMarkerColor = (storeType) => {
+    switch (storeType) {
+      case 'convenience': return 'red';
+      case 'pharmacy': return 'green';
+      default: return 'blue';
+    }
+  };
+
+  const onStorePress = (store) => {
+    let activeReminders = [];
+    try {
+      if (Array.isArray(reminders)) {
+        activeReminders = reminders.filter(r => 
+          r.store_type === store.store_type && r.is_active
+        );
+      }
+    } catch (filterError) {
+      console.error('Filter error in onStorePress:', filterError);
+    }
+
+    if (activeReminders.length > 0) {
+      Alert.alert(
+        `${getStoreIcon(store.store_type)} ${store.name}`,
+        `この店舗で${activeReminders.length}個のアクティブなリマインダーがあります:\n\n` +
+        activeReminders.map(r => `• ${r.title}`).join('\n'),
+        [
+          { text: 'OK' },
+          { text: '新しいリマインダー', onPress: () => navigation.navigate('ReminderForm') }
+        ]
+      );
+    } else {
+      Alert.alert(
+        `${getStoreIcon(store.store_type)} ${store.name}`,
+        'この店舗にリマインダーを作成しますか？',
+        [
+          { text: 'キャンセル' },
+          { text: 'リマインダー作成', onPress: () => navigation.navigate('ReminderForm') }
+        ]
+      );
+    }
+  };
+
   // ログアウト機能を削除
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.welcome}>こんにちは、{user?.username}さん！</Text>
       </View>
 
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.totalReminders}</Text>
-          <Text style={styles.statLabel}>総リマインダー数</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.activeReminders}</Text>
-          <Text style={styles.statLabel}>アクティブ</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{stats.triggeredToday}</Text>
-          <Text style={styles.statLabel}>今日のトリガー</Text>
-        </View>
-      </View>
-
-      {/* Location Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>📍 現在の位置情報</Text>
-        {location ? (
-          <View>
-            <Text style={styles.locationText}>
-              緯度: {location.latitude.toFixed(6)}
-            </Text>
-            <Text style={styles.locationText}>
-              経度: {location.longitude.toFixed(6)}
-            </Text>
-            <Text style={styles.locationText}>
-              精度: ±{Math.round(location.accuracy)}m
-            </Text>
-          </View>
-        ) : (
-          <Text style={styles.noLocationText}>位置情報を取得中...</Text>
-        )}
-        
-        <TouchableOpacity style={styles.secondaryButton} onPress={updateLocation}>
-          <Text style={styles.secondaryButtonText}>🔄 位置情報を更新</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Quick Actions */}
-      <View style={styles.card}>
+      <View style={styles.quickActionCard}>
         <Text style={styles.cardTitle}>⚡ クイックアクション</Text>
         <View style={styles.actionGrid}>
           <TouchableOpacity 
@@ -244,10 +294,42 @@ const DashboardScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('Map')}
           >
             <Text style={styles.actionButtonIcon}>🗺️</Text>
-            <Text style={styles.actionButtonText}>マップ</Text>
+            <Text style={styles.actionButtonText}>フルマップ</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={updateLocation}
+          >
+            <Text style={styles.actionButtonIcon}>🔄</Text>
+            <Text style={styles.actionButtonText}>位置更新</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+
+      {/* Stats and Additional Info */}
+      <ScrollView 
+        style={styles.bottomContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.totalReminders}</Text>
+            <Text style={styles.statLabel}>総リマインダー数</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.activeReminders}</Text>
+            <Text style={styles.statLabel}>アクティブ</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.triggeredToday}</Text>
+            <Text style={styles.statLabel}>今日のトリガー</Text>
+          </View>
+        </View>
 
       {/* Recent Reminders */}
       <View style={styles.card}>
@@ -269,10 +351,10 @@ const DashboardScreen = ({ navigation }) => {
                   <Text style={styles.reminderStore}>{reminder.store_type_display}</Text>
                   <View style={[
                     styles.statusBadge, 
-                    { backgroundColor: reminder.is_active ? '#28a745' : '#6c757d' }
+                    { backgroundColor: reminder.is_active ? '#28a745' : '#6c757d',marginLeft: 10 }
                   ]}>
                     <Text style={styles.statusText}>
-                      {reminder.is_active ? 'アクティブ' : '無効'}
+                      {reminder.is_active ? '有効' : '無効'}
                     </Text>
                   </View>
                 </View>
@@ -302,26 +384,9 @@ const DashboardScreen = ({ navigation }) => {
         </View>
       )}
 
-      {/* Settings */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>⚙️ 設定</Text>
-        <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={() => {
-            Alert.alert(
-              'ログアウト',
-              'ログアウトしますか？',
-              [
-                { text: 'キャンセル', style: 'cancel' },
-                { text: 'ログアウト', style: 'destructive', onPress: logout }
-              ]
-            );
-          }}
-        >
-          <Text style={styles.logoutButtonText}>ログアウト</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+
+      </ScrollView>
+    </View>
   );
 };
 
@@ -331,9 +396,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    padding: 20,
+    padding: 15,
     backgroundColor: '#fff',
-    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   welcome: {
     fontSize: 18,
@@ -341,10 +407,68 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
+  quickActionCard: {
+    backgroundColor: '#fff',
+    margin: 15,
+    marginBottom: 10,
+    padding: 15,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapContainer: {
+    backgroundColor: '#fff',
+    margin: 15,
+    marginTop: 5,
+    borderRadius: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapHeader: {
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  mapTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  mapSubtitle: {
+    fontSize: 12,
+    color: '#666',
+  },
+  map: {
+    width: width - 30,
+    height: 250,
+  },
+  mapPlaceholder: {
+    width: width - 30,
+    height: 250,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  mapPlaceholderText: {
+    fontSize: 16,
+    color: '#999',
+  },
+  bottomContent: {
+    flex: 1,
+  },
   statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: 15,
+    marginBottom: 10,
   },
   statCard: {
     flex: 1,
@@ -372,9 +496,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    margin: 20,
+    margin: 15,
     marginTop: 0,
-    padding: 20,
+    padding: 15,
     borderRadius: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -404,21 +528,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   actionButton: {
-    width: '30%',
+    width: '22%',
     backgroundColor: '#f8f9fa',
-    padding: 15,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   actionButtonIcon: {
     fontSize: 24,
     marginBottom: 5,
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#333',
     textAlign: 'center',
+    fontWeight: '500',
   },
   locationText: {
     fontSize: 14,
