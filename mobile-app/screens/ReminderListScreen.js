@@ -17,12 +17,16 @@ const ReminderListScreen = ({ navigation }) => {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextPageUrl, setNextPageUrl] = useState(null); // 次のページのURL
+  const [totalCount, setTotalCount] = useState(0); // 総件数
 
   useEffect(() => {
     fetchReminders();
   }, []);
 
-  const fetchReminders = async () => {
+
+  const fetchReminders = async (reset = true) => {
     try {
       console.log('=== ReminderList リマインダー取得開始 ===');
       console.log('リクエストURL:', `${axios.defaults.baseURL}/reminders/`);
@@ -31,6 +35,7 @@ const ReminderListScreen = ({ navigation }) => {
       
       console.log('ReminderList レスポンスステータス:', response.status);
       console.log('ReminderList レスポンスデータ型:', typeof response.data);
+      console.log('ReminderList レスポンス構造:', response.data);
       
       // HTMLレスポンスの検出
       if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE')) {
@@ -39,17 +44,40 @@ const ReminderListScreen = ({ navigation }) => {
         return;
       }
       
-      const remindersData = response.data.results || response.data || [];
-      console.log('ReminderList fetchReminders - remindersData type:', typeof remindersData);
-      console.log('ReminderList fetchReminders - remindersData isArray:', Array.isArray(remindersData));
-      console.log('ReminderList fetchReminders - remindersData:', remindersData);
-      setReminders(remindersData);
+      // Django REST Framework pagination response structure
+      if (response.data && typeof response.data === 'object') {
+        const remindersData = response.data.results || [];
+        const count = response.data.count || 0;
+        const next = response.data.next || null;
+        
+        console.log('ReminderList ページネーション情報:');
+        console.log('- results:', remindersData.length, '件');
+        console.log('- count (総数):', count);
+        console.log('- next:', next);
+        
+        if (reset) {
+          setReminders(remindersData);
+        } else {
+          setReminders(prev => [...prev, ...remindersData]);
+        }
+        
+        setTotalCount(count);
+        setNextPageUrl(next);
+      } else {
+        // フォールバック: 配列として処理
+        const remindersData = response.data || [];
+        setReminders(remindersData);
+        setTotalCount(remindersData.length);
+        setNextPageUrl(null);
+      }
     } catch (error) {
       console.error('=== ReminderList リマインダー取得エラー ===');
       console.error('Error message:', error.message);
       console.error('Error stack:', error.stack);
       console.error('Full error:', error);
       setReminders([]);
+      setTotalCount(0);
+      setNextPageUrl(null);
       Alert.alert('エラー', 'リマインダーの取得に失敗しました');
     } finally {
       setLoading(false);
@@ -69,11 +97,11 @@ const ReminderListScreen = ({ navigation }) => {
       });
       
       // Update local state
-      setReminders(Array.isArray(reminders) ? reminders.map(reminder => 
+      setReminders(reminders.map(reminder => 
         reminder.id === reminderId 
           ? { ...reminder, is_active: !currentStatus }
           : reminder
-      ) : []);
+      ));
       
       Alert.alert(
         '更新完了',
@@ -82,6 +110,43 @@ const ReminderListScreen = ({ navigation }) => {
     } catch (error) {
       console.error('リマインダー更新エラー:', error);
       Alert.alert('エラー', 'リマインダーの更新に失敗しました');
+    }
+  };
+
+  const loadMoreReminders = async () => {
+    if (!nextPageUrl || loadingMore) {
+      console.log('=== もっと見る: 実行不可 ===');
+      console.log('nextPageUrl:', nextPageUrl);
+      console.log('loadingMore:', loadingMore);
+      return;
+    }
+    
+    console.log('=== もっと見る機能開始 ===');
+    console.log('現在の表示件数:', reminders.length);
+    console.log('総件数:', totalCount);
+    console.log('次のページURL:', nextPageUrl);
+    
+    setLoadingMore(true);
+    
+    try {
+      const response = await axios.get(nextPageUrl);
+      console.log('次ページレスポンス:', response.data);
+      
+      const newRemindersData = response.data.results || [];
+      const newNext = response.data.next || null;
+      
+      // 既存のリマインダーに新しいデータを追加
+      setReminders(prev => [...prev, ...newRemindersData]);
+      setNextPageUrl(newNext);
+      
+      console.log('追加読み込み完了:', newRemindersData.length, '件');
+      console.log('新しい次ページURL:', newNext);
+      
+    } catch (error) {
+      console.error('追加読み込みエラー:', error);
+      Alert.alert('エラー', '追加データの読み込みに失敗しました');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -97,7 +162,8 @@ const ReminderListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await axios.delete(`${axios.defaults.baseURL}/reminders/${reminderId}/`);
-              setReminders(Array.isArray(reminders) ? reminders.filter(reminder => reminder.id !== reminderId) : []);
+              setReminders(reminders.filter(reminder => reminder.id !== reminderId));
+              setTotalCount(prev => prev - 1);
               Alert.alert('削除完了', 'リマインダーが削除されました');
             } catch (error) {
               console.error('リマインダー削除エラー:', error);
@@ -138,9 +204,16 @@ const ReminderListScreen = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerText}>
-            {Array.isArray(reminders) ? reminders.length : 0}個のリマインダー
-          </Text>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerText}>
+              {totalCount}個のリマインダー
+            </Text>
+            {totalCount > 0 && (
+              <Text style={styles.headerSubText}>
+                {Array.isArray(reminders) ? reminders.length : 0}件表示中
+              </Text>
+            )}
+          </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('ReminderForm')}
@@ -219,6 +292,27 @@ const ReminderListScreen = ({ navigation }) => {
             </View>
           ))
         )}
+
+        {/* Load More Button */}
+        {nextPageUrl && (
+          <View style={styles.loadMoreContainer}>
+            <TouchableOpacity
+              style={[styles.loadMoreButton, loadingMore && styles.loadMoreButtonDisabled]}
+              onPress={loadMoreReminders}
+              disabled={loadingMore}
+            >
+              <Text style={styles.loadMoreButtonText}>
+                {loadingMore ? '読み込み中...' : `もっと見る (残り${totalCount - reminders.length}件)`}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.loadMoreInfo}>
+              {reminders.length} / {totalCount} 件表示中
+            </Text>
+          </View>
+        )}
+
+        {/* Bottom Spacer */}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </View>
   );
@@ -247,10 +341,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  headerInfo: {
+    flex: 1,
+  },
   headerText: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+  },
+  headerSubText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
   },
   addButton: {
     backgroundColor: '#007AFF',
@@ -301,7 +403,7 @@ const styles = StyleSheet.create({
   },
   reminderCard: {
     backgroundColor: '#fff',
-    margin: 15,
+    margin: 3,
     padding: 20,
     borderRadius: 12,
     shadowColor: '#000',
@@ -374,6 +476,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '600',
+  },
+  loadMoreContainer: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    marginTop: 10,
+  },
+  loadMoreButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginBottom: 10,
+  },
+  loadMoreButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  loadMoreButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  loadMoreInfo: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  bottomSpacer: {
+    height: 30,
   },
 });
 

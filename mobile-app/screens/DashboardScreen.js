@@ -264,11 +264,6 @@ const DashboardScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.welcome}>こんにちは、{user?.username}さん！</Text>
-      </View>
-
       {/* Quick Actions */}
       <View style={styles.quickActionCard}>
         <Text style={styles.cardTitle}>⚡ クイックアクション</Text>
@@ -395,21 +390,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  welcome: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-  },
   quickActionCard: {
     backgroundColor: '#fff',
     margin: 15,
+    marginTop: 20,
     marginBottom: 10,
     padding: 15,
     borderRadius: 10,
