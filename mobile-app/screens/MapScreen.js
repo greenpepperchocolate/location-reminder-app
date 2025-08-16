@@ -354,14 +354,14 @@ const MapScreen = ({ navigation }) => {
         >
           <Text style={styles.controlButtonText}>+ リマインダー</Text>
         </TouchableOpacity>
-
+      {/*
         <TouchableOpacity 
           style={styles.controlButton} 
           onPress={() => navigation.navigate('Dashboard')}
         >
           <Text style={styles.controlButtonText}>📊 情報</Text>
         </TouchableOpacity>
-
+      */}
         <TouchableOpacity 
           style={styles.controlButton} 
           onPress={() => navigation.navigate('ReminderList')}
@@ -369,7 +369,7 @@ const MapScreen = ({ navigation }) => {
           <Text style={styles.controlButtonText}>📝 一覧</Text>
         </TouchableOpacity>
       </View>
-
+      
      
 
       {/* Info Panel */}

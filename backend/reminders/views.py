@@ -81,3 +81,19 @@ class ReminderViewSet(viewsets.ModelViewSet):
         logs = ReminderLog.objects.filter(reminder__user=request.user)
         serializer = ReminderLogSerializer(logs, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """リマインダーの統計情報を取得"""
+        from django.db.models import Count, Q
+        
+        # 一度のクエリで統計を取得
+        stats = Reminder.objects.filter(user=request.user).aggregate(
+            total_reminders=Count('id'),
+            active_reminders=Count('id', filter=Q(is_active=True))
+        )
+        
+        return Response({
+            'total_reminders': stats['total_reminders'] or 0,
+            'active_reminders': stats['active_reminders'] or 0
+        })

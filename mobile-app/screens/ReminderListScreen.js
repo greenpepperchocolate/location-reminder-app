@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     top: 15,
     right: 15,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 13,
     borderRadius: 12,
   },
   statusText: {

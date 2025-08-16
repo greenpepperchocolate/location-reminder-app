@@ -25,26 +25,14 @@ import ReminderListScreen from './screens/ReminderListScreen';
 
 const Stack = createStackNavigator();
 
-const getApiUrl = () => {
-  if (__DEV__) {
-    // Expo開発時は自動でIPを検出
-    const debuggerHost = Constants.manifest?.debuggerHost;
-    if (debuggerHost) {
-      const ip = debuggerHost.split(':')[0];
-      return `http://${ip}:8000/api`;
-    }
-    // フォールバック: localhost
-    return 'http://localhost:8000/api';
-  }
-  return 'http://localhost:8000/api'; // デフォルトはlocalhost
-};
+
 
 // API URLを1つに固定
 const API_URLS = [
   'http://192.168.3.4:8084/api', // 開発マシンのIP:8084
 ];
 
-const API_BASE_URL = "http://192.168.3.4:8084/api";
+const API_BASE_URL = "http://192.168.3.4:8000/api";
 // Django APIのベースURL（ローカルネットワーク用）
 //const API_BASE_URL = 'http://127.0.0.1:8000/api';
 

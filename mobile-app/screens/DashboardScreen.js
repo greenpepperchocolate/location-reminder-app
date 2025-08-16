@@ -24,10 +24,10 @@ const DashboardScreen = ({ navigation }) => {
   const [region, setRegion] = useState(null);
   const [stats, setStats] = useState({
     totalReminders: 0,
-    activeReminders: 0,
-    triggeredToday: 0
+    activeReminders: 0
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // 状態が不正になった時の保護
   React.useEffect(() => {
@@ -50,16 +50,26 @@ const DashboardScreen = ({ navigation }) => {
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       });
-      fetchStoresForMap();
-      fetchRemindersForMap();
     }
   }, [location]);
 
   const loadData = async () => {
-    await Promise.all([
-      fetchRecentReminders(),
-      location && fetchNearbyStores()
-    ]);
+    try {
+      // 統計データを最優先で取得
+      fetchStats();
+      
+      // その他のデータは並列で取得
+      const otherTasks = [fetchRecentReminders()];
+      
+      // 位置情報がある場合のみ店舗データを取得
+      if (location) {
+        otherTasks.push(fetchNearbyStores());
+      }
+      
+      await Promise.all(otherTasks);
+    } catch (error) {
+      console.error('データ読み込みエラー:', error);
+    }
   };
 
   const onRefresh = async () => {
@@ -69,146 +79,88 @@ const DashboardScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await axios.get('/reminders/stats/', {
+        timeout: 5000 // 5秒でタイムアウト
+      });
+      setStats({
+        totalReminders: response.data.total_reminders || 0,
+        activeReminders: response.data.active_reminders || 0
+      });
+    } catch (error) {
+      console.error('統計取得エラー:', error);
+      setStats({
+        totalReminders: 0,
+        activeReminders: 0
+      });
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   const fetchRecentReminders = async () => {
     try {
-      console.log('=== Dashboard リマインダー取得開始 ===');
-      console.log('リクエストURL:', `${axios.defaults.baseURL}/reminders/`);
+      const response = await axios.get('/reminders/');
       
-      const response = await axios.get(`${axios.defaults.baseURL}/reminders/`);
-      
-      console.log('Dashboard レスポンスステータス:', response.status);
-      console.log('Dashboard レスポンスデータ型:', typeof response.data);
-      
-      // HTMLレスポンスの検出
-      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE')) {
-        console.error('⚠️ リマインダー取得でHTMLレスポンスを受信 - 間違ったサーバーにアクセスしています');
-        console.error('期待: JSON、実際: HTMLドキュメント');
+      if (typeof response.data === 'string') {
         setRecentReminders([]);
+        setReminders([]);
         return;
       }
       
       const reminders = response.data.results || response.data || [];
-      console.log('Dashboard fetchRecentReminders - reminders type:', typeof reminders);
-      console.log('Dashboard fetchRecentReminders - reminders isArray:', Array.isArray(reminders));
-      console.log('Dashboard fetchRecentReminders - reminders:', reminders);
       
       try {
         if (Array.isArray(reminders)) {
           setRecentReminders(reminders.slice(0, 5));
+          setReminders(reminders); // マップ用にも設定
         } else {
           console.error('Cannot slice non-array reminders:', reminders);
           setRecentReminders([]);
+          setReminders([]);
         }
       } catch (sliceError) {
-        console.error('Error slicing reminders:', sliceError);
         setRecentReminders([]);
+        setReminders([]);
       }
-      
-      let active = 0;
-      try {
-        if (Array.isArray(reminders)) {
-          active = reminders.filter(r => r.is_active).length;
-        } else {
-          console.error('reminders is not an array in Dashboard:', typeof reminders, reminders);
-        }
-      } catch (filterError) {
-        console.error('Filter error in Dashboard:', filterError);
-        console.error('reminders value:', reminders);
-      }
-      setStats(prev => ({
-        ...prev,
-        totalReminders: Array.isArray(reminders) ? reminders.length : 0,
-        activeReminders: active
-      }));
     } catch (error) {
-      console.error('=== Dashboard リマインダー取得エラー ===');
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      console.error('Full error:', error);
+      console.error('リマインダー取得エラー:', error.message);
       setRecentReminders([]);
+      setReminders([]);
     }
   };
 
   const fetchNearbyStores = async () => {
     try {
-      console.log('=== Dashboard: 店舗データ取得開始 ===');
-      console.log('パラメータ:', {
-        lat: location.latitude,
-        lng: location.longitude,
-        radius: 0.5
-      });
-      console.log('リクエストURL:', `${axios.defaults.baseURL}/stores/nearby/`);
-      
-      const response = await axios.get(`${axios.defaults.baseURL}/stores/nearby/`, {
+      const response = await axios.get('/stores/nearby/', {
         params: {
           lat: location.latitude,
           lng: location.longitude,
-          radius: 5.0 // 5km以内に拡大してテスト
+          radius: 2.0
         }
       });
       
-      console.log('Dashboard レスポンスステータス:', response.status);
-      console.log('Dashboard レスポンスヘッダー:', response.headers);
-      console.log('Dashboard レスポンスデータ型:', typeof response.data);
-      console.log('Dashboard レスポンスデータ:', response.data);
-      
-      // HTMLレスポンスの検出
-      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE')) {
-        console.error('⚠️ HTMLレスポンスを受信 - 間違ったサーバーにアクセスしています');
-        console.error('期待: JSON配列、実際: HTMLドキュメント');
+      if (typeof response.data === 'string') {
         setNearbyStores([]);
         return;
       }
       
       const stores = response.data || [];
       if (!Array.isArray(stores)) {
-        console.error('⚠️ レスポンスが配列ではありません:', typeof stores);
         setNearbyStores([]);
         return;
       }
       
-      console.log('Dashboard: 店舗データ取得成功:', stores.length, '件');
       setNearbyStores(stores.slice(0, 5));
     } catch (error) {
-      console.error('=== Dashboard: 近隣店舗取得エラー ===');
-      console.error('Error:', error.message);
-      if (error.response) {
-        console.error('レスポンスデータ:', error.response.data);
-        console.error('ステータスコード:', error.response.status);
-        console.error('レスポンスヘッダー:', error.response.headers);
-      } else if (error.request) {
-        console.error('リクエストエラー:', error.request);
-      }
+      console.error('近隣店舗取得エラー:', error.message);
       setNearbyStores([]);
     }
   };
 
-  const fetchStoresForMap = async () => {
-    try {
-      const response = await axios.get(`${axios.defaults.baseURL}/stores/nearby/`, {
-        params: {
-          lat: location.latitude,
-          lng: location.longitude,
-          radius: 2.0 // 2km以内
-        }
-      });
-      setStores(response.data || []);
-    } catch (error) {
-      console.error('Dashboard: 店舗データ取得エラー:', error);
-      setStores([]);
-    }
-  };
 
-  const fetchRemindersForMap = async () => {
-    try {
-      const response = await axios.get(`${axios.defaults.baseURL}/reminders/`);
-      const remindersData = response.data.results || response.data || [];
-      setReminders(remindersData);
-    } catch (error) {
-      console.error('Dashboard: リマインダー取得エラー:', error);
-      setReminders([]);
-    }
-  };
 
   const getStoreIcon = (storeType) => {
     switch (storeType) {
@@ -313,16 +265,16 @@ const DashboardScreen = ({ navigation }) => {
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.totalReminders}</Text>
+            <Text style={styles.statNumber}>
+              {statsLoading ? "..." : stats.totalReminders}
+            </Text>
             <Text style={styles.statLabel}>総リマインダー数</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.activeReminders}</Text>
+            <Text style={styles.statNumber}>
+              {statsLoading ? "..." : stats.activeReminders}
+            </Text>
             <Text style={styles.statLabel}>アクティブ</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.triggeredToday}</Text>
-            <Text style={styles.statLabel}>今日のトリガー</Text>
           </View>
         </View>
 
