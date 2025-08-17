@@ -63,8 +63,9 @@ class ReminderViewSet(viewsets.ModelViewSet):
                         distance_to_store=min_distance
                     )
                     
-                    # 最後のトリガー時間を更新
+                    # 最後のトリガー時間を更新し、リマインダーを無効化
                     reminder.last_triggered = now
+                    reminder.is_active = False  # アラート後にリマインダーを無効化
                     reminder.save()
                     
                     triggered_reminders.append(reminder)

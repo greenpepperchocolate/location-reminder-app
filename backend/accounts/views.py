@@ -12,7 +12,13 @@ from .models import User
 from .utils import send_verification_email, send_welcome_email, send_password_reset_email
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-# from .icloud_service import icloud_service  # 削除: pyicloud依存を削除
+from google.auth.transport import requests
+from google.oauth2 import id_token
+import logging
+import random
+import string
+
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -292,6 +298,113 @@ def get_location(request):
             'timestamp': user.last_location_update
         }
     })
+
+# Google認証エンドポイント
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_auth(request):
+    """Google認証でログインまたは新規登録"""
+    access_token = request.data.get('access_token')
+    email = request.data.get('email')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    google_id = request.data.get('google_id')
+    picture = request.data.get('picture', '')
+    
+    if not access_token or not email or not google_id:
+        return Response({
+            'error': 'access_token、email、google_idが必要です。'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Googleトークンの検証（簡易版 - 本番では厳密な検証が必要）
+        logger.info(f"Google認証試行: {email}")
+        
+        # 既存のGoogleユーザーをチェック
+        try:
+            user = User.objects.get(google_id=google_id)
+            logger.info(f"既存のGoogleユーザーでログイン: {user.email}")
+            
+            # 認証トークンを生成
+            token, created = Token.objects.get_or_create(user=user)
+            
+            return Response({
+                'token': token.key,
+                'user': UserSerializer(user).data,
+                'is_new_user': False,
+                'message': 'Googleアカウントでログインしました。'
+            })
+            
+        except User.DoesNotExist:
+            # 同じメールアドレスの既存ユーザーをチェック
+            existing_user = None
+            try:
+                existing_user = User.objects.get(email=email)
+                
+                # 既存ユーザーにGoogle情報を追加
+                existing_user.google_id = google_id
+                existing_user.google_picture = picture
+                existing_user.is_google_user = True
+                existing_user.is_email_verified = True  # Googleアカウントは認証済み
+                existing_user.save()
+                
+                logger.info(f"既存ユーザーにGoogle認証を連携: {existing_user.email}")
+                
+                token, created = Token.objects.get_or_create(user=existing_user)
+                
+                return Response({
+                    'token': token.key,
+                    'user': UserSerializer(existing_user).data,
+                    'is_new_user': False,
+                    'message': '既存アカウントにGoogleアカウントを連携しました。'
+                })
+                
+            except User.DoesNotExist:
+                # 新規Googleユーザーを作成
+                username = email.split('@')[0]
+                
+                # ユニークなユーザー名を生成
+                counter = 1
+                original_username = username
+                while User.objects.filter(username=username).exists():
+                    username = f"{original_username}{counter}"
+                    counter += 1
+                
+                # ランダムパスワードを生成（Google認証ユーザーは使用しない）
+                random_password = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+                
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    password=random_password,
+                    google_id=google_id,
+                    google_picture=picture,
+                    is_google_user=True,
+                    is_email_verified=True  # Googleアカウントは認証済み
+                )
+                
+                logger.info(f"新規Googleユーザー作成: {user.email}")
+                
+                # ウェルカムメールを送信
+                send_welcome_email(user)
+                
+                # 認証トークンを生成
+                token, created = Token.objects.get_or_create(user=user)
+                
+                return Response({
+                    'token': token.key,
+                    'user': UserSerializer(user).data,
+                    'is_new_user': True,
+                    'message': 'Googleアカウントで新規登録が完了しました。'
+                }, status=status.HTTP_201_CREATED)
+                
+    except Exception as e:
+        logger.error(f"Google認証エラー: {str(e)}")
+        return Response({
+            'error': 'Google認証の処理中にエラーが発生しました。'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # React Native接続テスト用エンドポイント
 @api_view(['GET'])

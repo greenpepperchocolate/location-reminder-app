@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Switch,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -15,7 +14,7 @@ import axios from 'axios';
 import { AuthContext } from '../App';
 
 const ReminderFormScreen = ({ navigation }) => {
-  const { location } = useContext(AuthContext);
+  const { location, geofenceService } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     store_type: '',
     title: '',
@@ -69,6 +68,14 @@ const ReminderFormScreen = ({ navigation }) => {
       
       const response = await axios.post(`${axios.defaults.baseURL}/reminders/`, submitData);
       console.log('レスポンス:', response.data);
+      
+      // ジオフェンスサービスにリマインダーを登録
+      try {
+        await geofenceService.addReminder(response.data);
+        console.log('✅ ジオフェンスサービスに登録完了');
+      } catch (geofenceError) {
+        console.error('⚠️ ジオフェンス登録エラー:', geofenceError);
+      }
       
       Alert.alert(
         '成功 ✨',
@@ -145,6 +152,7 @@ const ReminderFormScreen = ({ navigation }) => {
             value={formData.title}
             onChangeText={(value) => handleChange('title', value)}
             placeholder="例: 胃薬を買う"
+            placeholderTextColor="#6b7280"
             maxLength={200}
           />
         </View>
@@ -157,27 +165,11 @@ const ReminderFormScreen = ({ navigation }) => {
             value={formData.memo}
             onChangeText={(value) => handleChange('memo', value)}
             placeholder="詳細なメモ（例: 処方箋持参、第一三共胃腸薬など）"
+            placeholderTextColor="#6b7280"
             multiline
             numberOfLines={4}
           />
         </View>
-
-
-        {/* Active Switch */}
-        <View style={styles.formGroup}>
-          <View style={styles.switchContainer}>
-            <Text style={styles.label}>
-              {formData.is_active ? '🟢' : '⚫'} リマインダーを有効にする
-            </Text>
-            <Switch
-              value={formData.is_active}
-              onValueChange={(value) => handleChange('is_active', value)}
-              trackColor={{ false: '#767577', true: '#81b0ff' }}
-              thumbColor={formData.is_active ? '#007AFF' : '#f4f3f4'}
-            />
-          </View>
-        </View>
-
 
         {/* Buttons */}
         <View style={styles.buttonContainer}>
@@ -217,7 +209,7 @@ const ReminderFormScreen = ({ navigation }) => {
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>🔄 リマインダー管理:</Text>
             <Text style={styles.infoDescription}>
-              作成後もリマインダー一覧から編集・削除が可能です
+              作成後はリマインダー一覧から有効/無効の切り替えや削除が可能です
             </Text>
           </View>
           <View style={styles.infoItem}>
@@ -241,7 +233,7 @@ const ReminderFormScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#000000',
   },
   scrollContainer: {
     flex: 1,
@@ -259,16 +251,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#22c55e',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
     padding: 12,
     borderRadius: 8,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#1f1f1f',
+    color: '#ffffff',
   },
   textArea: {
     height: 100,
@@ -281,21 +274,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 15,
-    backgroundColor: '#fff',
+    backgroundColor: '#1f1f1f',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: 'rgba(34, 197, 94, 0.3)',
   },
   optionButtonSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#f0f8ff',
+    borderColor: '#22c55e',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
   },
   radioButton: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: '#10b981',
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -304,20 +297,20 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#22c55e',
   },
   optionText: {
     fontSize: 16,
-    color: '#333',
+    color: '#ffffff',
     flex: 1,
   },
   optionTextSelected: {
-    color: '#007AFF',
+    color: '#22c55e',
     fontWeight: '600',
   },
   helperText: {
     fontSize: 14,
-    color: '#999',
+    color: '#9ca3af',
     marginTop: 8,
     fontStyle: 'italic',
   },
@@ -340,16 +333,6 @@ const styles = StyleSheet.create({
     color: '#495057',
     marginBottom: 4,
     lineHeight: 20,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
   },
   infoBox: {
     backgroundColor: '#e3f2fd',
@@ -377,44 +360,51 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#6c757d',
+    backgroundColor: '#374151',
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#4b5563',
   },
   cancelButtonText: {
-    color: '#fff',
+    color: '#9ca3af',
     fontSize: 16,
     fontWeight: 'bold',
   },
   submitButton: {
     flex: 1,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#22c55e',
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
     marginLeft: 10,
+    borderWidth: 1,
+    borderColor: '#10b981',
   },
   submitButtonText: {
-    color: '#fff',
+    color: '#000000',
     fontSize: 16,
     fontWeight: 'bold',
   },
   buttonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#374151',
+    borderColor: '#4b5563',
   },
   additionalInfo: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1f1f1f',
     margin: 20,
     marginTop: 30,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: '#22c55e',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
   },
   summarySection: {
     backgroundColor: '#fff',
@@ -431,7 +421,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#22c55e',
     marginBottom: 15,
     textAlign: 'center',
   },
@@ -441,12 +431,12 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#495057',
+    color: '#10b981',
     marginBottom: 5,
   },
   infoDescription: {
     fontSize: 14,
-    color: '#6c757d',
+    color: '#9ca3af',
     lineHeight: 20,
     paddingLeft: 10,
   },

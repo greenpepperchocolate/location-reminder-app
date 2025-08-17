@@ -13,7 +13,7 @@ import axios from 'axios';
 import { AuthContext } from '../App';
 
 const ReminderListScreen = ({ navigation }) => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, geofenceService } = useContext(AuthContext);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -162,6 +162,15 @@ const ReminderListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await axios.delete(`${axios.defaults.baseURL}/reminders/${reminderId}/`);
+              
+              // ジオフェンスサービスからも削除
+              try {
+                await geofenceService.removeReminder(reminderId);
+                console.log('✅ ジオフェンスサービスから削除完了');
+              } catch (geofenceError) {
+                console.error('⚠️ ジオフェンス削除エラー:', geofenceError);
+              }
+              
               setReminders(reminders.filter(reminder => reminder.id !== reminderId));
               setTotalCount(prev => prev - 1);
               Alert.alert('削除完了', 'リマインダーが削除されました');
@@ -251,8 +260,8 @@ const ReminderListScreen = ({ navigation }) => {
                 <Switch
                   value={reminder.is_active}
                   onValueChange={() => toggleReminderStatus(reminder.id, reminder.is_active)}
-                  trackColor={{ false: '#767577', true: '#81b0ff' }}
-                  thumbColor={reminder.is_active ? '#007AFF' : '#f4f3f4'}
+                  trackColor={{ false: '#374151', true: '#10b981' }}
+                  thumbColor={reminder.is_active ? '#22c55e' : '#6b7280'}
                 />
               </View>
 
@@ -321,25 +330,26 @@ const ReminderListScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#000000',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000000',
   },
   loadingText: {
     fontSize: 18,
-    color: '#666',
+    color: '#22c55e',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: 'rgba(34, 197, 94, 0.3)',
   },
   headerInfo: {
     flex: 1,
@@ -347,21 +357,23 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#ffffff',
   },
   headerSubText: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffffff',
     marginTop: 2,
   },
   addButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#22c55e',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#10b981',
   },
   addButtonText: {
-    color: '#fff',
+    color: '#000000',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -371,6 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
     marginTop: 100,
+    backgroundColor: '#000000',
   },
   emptyIcon: {
     fontSize: 64,
@@ -379,39 +392,43 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#22c55e',
     marginBottom: 10,
     textAlign: 'center',
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: '#9ca3af',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 30,
   },
   createFirstButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#22c55e',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#10b981',
   },
   createFirstButtonText: {
-    color: '#fff',
+    color: '#000000',
     fontSize: 16,
     fontWeight: 'bold',
   },
   reminderCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1f1f1f',
     margin: 3,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: '#22c55e',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -426,16 +443,16 @@ const styles = StyleSheet.create({
   reminderTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#ffffff',
     marginBottom: 5,
   },
   storeType: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffffff',
   },
   memo: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffffff',
     marginBottom: 15,
     lineHeight: 20,
   },
@@ -449,17 +466,19 @@ const styles = StyleSheet.create({
   },
   distance: {
     fontSize: 12,
-    color: '#007AFF',
+    color: '#ffffff',
     marginBottom: 2,
   },
   createdDate: {
     fontSize: 12,
-    color: '#999',
+    color: '#ffffff',
   },
   deleteButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: '#ffe6e6',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
   },
   deleteButtonText: {
     fontSize: 18,
@@ -480,28 +499,31 @@ const styles = StyleSheet.create({
   loadMoreContainer: {
     padding: 20,
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#1a1a1a',
     marginTop: 10,
   },
   loadMoreButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#22c55e',
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 25,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#10b981',
   },
   loadMoreButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#374151',
+    borderColor: '#4b5563',
   },
   loadMoreButtonText: {
-    color: '#fff',
+    color: '#000000',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   loadMoreInfo: {
     fontSize: 14,
-    color: '#666',
+    color: '#9ca3af',
     textAlign: 'center',
   },
   bottomSpacer: {

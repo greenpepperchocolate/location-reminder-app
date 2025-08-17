@@ -20,6 +20,11 @@ class User(AbstractUser):
     password_reset_token = models.UUIDField(null=True, blank=True, unique=True)
     password_reset_sent_at = models.DateTimeField(null=True, blank=True)
     
+    # Google認証関連フィールド
+    google_id = models.CharField(max_length=255, blank=True, null=True, unique=True, help_text="GoogleアカウントのユニークID")
+    google_picture = models.URLField(blank=True, null=True, help_text="Googleプロフィール画像URL")
+    is_google_user = models.BooleanField(default=False, help_text="Google認証で作成されたアカウント")
+    
     # iCloud位置情報設定
     icloud_email = models.EmailField(blank=True, null=True, help_text="iCloud位置情報取得用のApple ID")
     icloud_password_encrypted = models.TextField(blank=True, help_text="暗号化されたiCloudパスワード")

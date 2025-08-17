@@ -18,10 +18,13 @@ import Constants from 'expo-constants';
 
 // Import screens (we'll create these)
 import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
+import EmailVerificationScreen from './screens/EmailVerificationScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import MapScreen from './screens/MapScreen';
 import ReminderFormScreen from './screens/ReminderFormScreen';
 import ReminderListScreen from './screens/ReminderListScreen';
+import OptimizedGeofenceService from './services/OptimizedGeofenceService';
 
 const Stack = createStackNavigator();
 
@@ -134,6 +137,26 @@ export default function App() {
     await testAPIConnection();
     await checkAuthStatus();
     await requestLocationPermission();
+    
+    // 最適化ジオフェンスサービス初期化
+    try {
+      await OptimizedGeofenceService.initialize();
+      
+      // 既存のリマインダーを読み込み（ジオフェンス機能なしでも実行）
+      await loadExistingReminders();
+      
+      console.log('✅ 最適化ジオフェンスサービス初期化完了');
+    } catch (error) {
+      console.warn('⚠️ ジオフェンス機能は無効（Expo Go制限）');
+      console.log('📝 完全機能テストには開発ビルドが必要: npx expo run:ios');
+      
+      // ジオフェンス機能なしでもリマインダー管理は可能
+      try {
+        await loadExistingReminders();
+      } catch (loadError) {
+        console.error('リマインダー読み込みエラー:', loadError);
+      }
+    }
   };
 
   const testAPIConnection = async () => {
@@ -189,20 +212,80 @@ export default function App() {
     }
   };
 
+  const loadExistingReminders = async () => {
+    try {
+      // 認証済みの場合のみリマインダーを読み込み
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      console.log('既存リマインダーの読み込み開始...');
+      const response = await axios.get('/reminders/');
+      const reminders = response.data.results || response.data || [];
+      
+      // アクティブなリマインダーのみジオフェンスサービスに登録
+      const activeReminders = reminders.filter(reminder => reminder.is_active);
+      
+      for (const reminder of activeReminders) {
+        try {
+          await OptimizedGeofenceService.addReminder(reminder);
+        } catch (error) {
+          console.error('リマインダー登録エラー:', reminder.id, error);
+        }
+      }
+      
+      console.log(`✅ 既存リマインダー読み込み完了: ${activeReminders.length}件`);
+      
+    } catch (error) {
+      console.error('既存リマインダー読み込みエラー:', error);
+    }
+  };
+
   const requestLocationPermission = async () => {
     try {
+      // Expo Go環境での制限を考慮した許可要求
+      console.log('位置情報許可要求開始...');
+      
       const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log('フォアグラウンド位置情報許可結果:', status);
+      
       if (status !== 'granted') {
-        Alert.alert('位置情報許可が必要です', 'アプリの機能を使用するために位置情報へのアクセスを許可してください。');
-        return;
+        console.warn('位置情報許可が拒否されました');
+        Alert.alert(
+          '位置情報許可が必要です', 
+          'リマインダー機能を使用するには位置情報へのアクセスを許可してください。\n\n開発版では設定が正しく反映されない場合があります。',
+          [
+            { text: 'OK', onPress: () => console.log('位置情報許可ダイアログ閉じる') }
+          ]
+        );
+        return false;
       }
 
-      const backgroundStatus = await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus.status !== 'granted') {
-        Alert.alert('バックグラウンド位置情報', 'より正確なリマインダーのためにバックグラウンドでの位置情報アクセスを許可することをお勧めします。');
+      // バックグラウンド許可は開発ビルドでのみ有効
+      try {
+        const backgroundStatus = await Location.requestBackgroundPermissionsAsync();
+        console.log('バックグラウンド位置情報許可結果:', backgroundStatus.status);
+        
+        if (backgroundStatus.status !== 'granted') {
+          console.log('バックグラウンド位置情報が許可されていません（開発環境では正常）');
+        }
+      } catch (bgError) {
+        console.warn('バックグラウンド位置情報許可エラー（開発環境では正常）:', bgError.message);
       }
+      
+      return true;
     } catch (error) {
       console.error('位置情報許可エラー:', error);
+      
+      // Info.plistエラーの場合は具体的な解決策を提示
+      if (error.message.includes('NSLocation')) {
+        Alert.alert(
+          '開発環境の制限',
+          'Expo Goでは位置情報機能に制限があります。\n\n完全な機能を使用するには:\n1. EAS Build で開発ビルドを作成\n2. または実機でテスト\n\n現在は基本機能のみ利用可能です。',
+          [{ text: '了解', onPress: () => console.log('開発環境制限ダイアログ閉じる') }]
+        );
+      }
+      
+      return false;
     }
   };
 
@@ -317,7 +400,8 @@ export default function App() {
       login, 
       logout,
       updateLocation,
-      API_BASE_URL 
+      API_BASE_URL,
+      geofenceService: OptimizedGeofenceService
     }}>
       <NavigationContainer>
         <Stack.Navigator 
@@ -329,17 +413,39 @@ export default function App() {
           }}
         >
           {!isLoggedIn ? (
-            <Stack.Screen 
-              name="Login" 
-              component={LoginScreen} 
-              options={{ headerShown: false }}
-            />
+            <>
+              <Stack.Screen 
+                name="Login" 
+                component={LoginScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Register" 
+                component={RegisterScreen} 
+                options={{ 
+                  title: '新規登録',
+                  headerStyle: { backgroundColor: '#007AFF' },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: { fontWeight: 'bold' }
+                }}
+              />
+              <Stack.Screen 
+                name="EmailVerification" 
+                component={EmailVerificationScreen} 
+                options={{ 
+                  title: 'メール認証',
+                  headerStyle: { backgroundColor: '#007AFF' },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: { fontWeight: 'bold' }
+                }}
+              />
+            </>
           ) : (
             <>
               <Stack.Screen 
                 name="Map" 
                 component={MapScreen} 
-                options={{ title: '🗺️ マップ' }}
+                options={{ title: 'Map' }}
               />
               <Stack.Screen 
                 name="Dashboard" 
@@ -354,7 +460,7 @@ export default function App() {
               <Stack.Screen 
                 name="ReminderList" 
                 component={ReminderListScreen} 
-                options={{ title: '📝 リマインダー一覧' }}
+                options={{ title: 'リマインダーリスト' }}
               />
             </>
           )}

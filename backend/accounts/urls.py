@@ -11,6 +11,9 @@ urlpatterns = [
     path('request-password-reset/', views.request_password_reset, name='request_password_reset'),
     path('reset-password/<uuid:token>/', views.reset_password, name='reset_password'),
     
+    # Google認証
+    path('google/', views.google_auth, name='google_auth'),
+    
     # React Native位置情報API
     path('location/update/', views.update_location, name='update_location'),
     path('location/get/', views.get_location, name='get_location'),
